@@ -15,9 +15,14 @@ export class CdkWorkshopLambdaStack extends Stack {
       subnetConfiguration: [
         {
           cidrMask: 24,
-          name: "publicSubnet",
-          subnetType: ec2.SubnetType.PUBLIC,
+          name: "privateSubnet",
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
+        {
+          cidrMask: 24,
+          name: 'publicSubnet',
+          subnetType: ec2.SubnetType.PUBLIC
+        }
       ],
     });
 
@@ -41,7 +46,7 @@ export class CdkWorkshopLambdaStack extends Stack {
     const privateVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "PrivateApiVpc", {
       vpc,
       service: ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
-      subnets: { subnets: vpc.publicSubnets },
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [vpcEndpointSecurityGroup],
       open: false,
     });
