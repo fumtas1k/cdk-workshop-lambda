@@ -46,7 +46,7 @@ export class CdkWorkshopLambdaStack extends Stack {
       securityGroups: [vpcEndpointSecurityGroup],
       open: false,
     });
-    // Service Managerを使用するためのVPCエンドポイント
+    // EC2のSession Managerを使用するために必要なVPCエンドポイント
     const ssmVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "ssmVpce", {
       vpc,
       service: ec2.InterfaceVpcEndpointAwsService.SSM,
