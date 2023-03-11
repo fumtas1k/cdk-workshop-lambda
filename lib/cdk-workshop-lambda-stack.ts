@@ -1,7 +1,7 @@
 import { Stack, StackProps } from 'aws-cdk-lib';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { EndpointType, LambdaRestApi } from 'aws-cdk-lib/aws-apigateway';
+import { EndpointType, LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
@@ -12,17 +12,13 @@ export class CdkWorkshopLambdaStack extends Stack {
 
     // VPC
     const vpc = new ec2.Vpc(this, 'Vpc', {
+      maxAzs: 1,
       subnetConfiguration: [
         {
           cidrMask: 24,
           name: "privateSubnet",
-          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
         },
-        {
-          cidrMask: 24,
-          name: 'publicSubnet',
-          subnetType: ec2.SubnetType.PUBLIC
-        }
       ],
     });
 
@@ -42,11 +38,33 @@ export class CdkWorkshopLambdaStack extends Stack {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
     });
 
-    // VPCエンドポイント
-    const privateVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "PrivateApiVpc", {
+    // API GateWay用のVPCエンドポイント
+    const privateApiVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "PrivateApiVpce", {
       vpc,
       service: ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
-      subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      securityGroups: [vpcEndpointSecurityGroup],
+      open: false,
+    });
+    // Service Managerを使用するためのVPCエンドポイント
+    const ssmVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "ssmVpce", {
+      vpc,
+      service: ec2.InterfaceVpcEndpointAwsService.SSM,
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      securityGroups: [vpcEndpointSecurityGroup],
+      open: false,
+    });
+    const ssmMessagesVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "ssmMessagesVpce", {
+      vpc,
+      service: ec2.InterfaceVpcEndpointAwsService.SSM_MESSAGES,
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      securityGroups: [vpcEndpointSecurityGroup],
+      open: false,
+    });
+    const ec2MessagesVpcEndpoint = new ec2.InterfaceVpcEndpoint(this, "ec2MessagesVpce", {
+      vpc,
+      service: ec2.InterfaceVpcEndpointAwsService.EC2_MESSAGES,
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [vpcEndpointSecurityGroup],
       open: false,
     });
@@ -61,7 +79,7 @@ export class CdkWorkshopLambdaStack extends Stack {
           effect: iam.Effect.DENY,
           conditions: {
             StringNotEquals: {
-              "aws:SourceVpce": privateVpcEndpoint.vpcEndpointId
+              "aws:SourceVpce": privateApiVpcEndpoint.vpcEndpointId
             }
           }
         }),
@@ -98,10 +116,14 @@ export class CdkWorkshopLambdaStack extends Stack {
     });
 
     // private API Gateway
-    const privateApi = new LambdaRestApi(this, 'privateApi', {
+    const privateApiGw = new RestApi(this, 'privateApiGw', {
       endpointTypes: [EndpointType.PRIVATE],
-      handler: lambda,
       policy: apiPolicy,
+      deployOptions: {
+        stageName: 'dev1'
+      }
     });
+    const hello = privateApiGw.root.addResource("hello");
+    hello.addMethod("GET", new LambdaIntegration(lambda));
   }
 }
